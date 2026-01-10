@@ -3,25 +3,14 @@
 #include <string.h>
 #include "trie.h"
 
-struct _list {
-    int startNode;
-    int targetNode;
-    unsigned char letter;
-    struct _list *next;
-};
-
-typedef struct _list *List;
-
 struct _trie {
     int maxNode;
     int nextNode;
-    List *transition;
+    int **transition;
     char *finite;
     int *suppleant;
-    int hashSize;
 };
 
-// File pour le parcours en largeur
 struct _queue {
     int *data;
     int front;
@@ -76,19 +65,14 @@ void freeQueue(Queue q) {
     free(q);
 }
 
-static unsigned int hashFunction(int state, unsigned char letter, int m) {
-    return ((state * 256) + letter) % m;
-}
-
 Trie createTrie(int maxNode) {
     Trie trie = malloc(sizeof(struct _trie));
     if (!trie) return NULL;
     
     trie->maxNode = maxNode;
     trie->nextNode = 1;
-    trie->hashSize = (maxNode * ALPHA_SIZE) / 0.75;
     
-    trie->transition = calloc(trie->hashSize, sizeof(List));
+    trie->transition = malloc(maxNode * sizeof(int*));
     trie->finite = calloc(maxNode, sizeof(char));
     trie->suppleant = calloc(maxNode, sizeof(int));
     
@@ -100,35 +84,22 @@ Trie createTrie(int maxNode) {
         return NULL;
     }
     
+    for (int i = 0; i < maxNode; i++) {
+        trie->transition[i] = malloc(ALPHA_SIZE * sizeof(int));
+        if (!trie->transition[i]) {
+            for (int j = 0; j < i; j++) 
+                free(trie->transition[j]);
+            free(trie->transition);
+            free(trie->finite);
+            free(trie->suppleant);
+            free(trie);
+            return NULL;
+        }
+        for (int j = 0; j < ALPHA_SIZE; j++)
+            trie->transition[i][j] = -1;
+    }
+    
     return trie;
-}
-
-static int getTarget(Trie trie, int state, unsigned char c) {
-    unsigned int h = hashFunction(state, c, trie->hashSize);
-    List l = trie->transition[h];
-    
-    while (l) {
-        if (l->startNode == state && l->letter == c)
-            return l->targetNode;
-        l = l->next;
-    }
-    return -1;
-}
-
-static void addTransition(Trie trie, int from, unsigned char c, int to) {
-    unsigned int h = hashFunction(from, c, trie->hashSize);
-    
-    List newLink = malloc(sizeof(struct _list));
-    if (!newLink) {
-        fprintf(stderr, "Erreur allocation memoire\n");
-        return;
-    }
-    
-    newLink->startNode = from;
-    newLink->targetNode = to;
-    newLink->letter = c;
-    newLink->next = trie->transition[h];
-    trie->transition[h] = newLink;
 }
 
 void insertInTrie(Trie trie, unsigned char *w) {
@@ -139,18 +110,16 @@ void insertInTrie(Trie trie, unsigned char *w) {
     
     for (int i = 0; i < len; i++) {
         unsigned char c = w[i];
-        int target = getTarget(trie, state, c);
         
-        if (target == -1) {
+        if (trie->transition[state][c] == -1) {
             if (trie->nextNode >= trie->maxNode) {
                 fprintf(stderr, "Erreur: trie plein\n");
                 return;
             }
-            target = trie->nextNode;
-            addTransition(trie, state, c, target);
+            trie->transition[state][c] = trie->nextNode;
             trie->nextNode++;
         }
-        state = target;
+        state = trie->transition[state][c];
     }
     
     trie->finite[state] = 1;
@@ -158,7 +127,7 @@ void insertInTrie(Trie trie, unsigned char *w) {
 
 int getTransition(Trie trie, int state, unsigned char c) {
     if (!trie || state < 0 || state >= trie->nextNode) return -1;
-    return getTarget(trie, state, c);
+    return trie->transition[state][c];
 }
 
 int isFiniteState(Trie trie, int state) {
@@ -181,72 +150,43 @@ int getNextNode(Trie trie) {
     return trie->nextNode;
 }
 
-// Fonction pour récupérer tous les fils d'un état (nécessaire pour le parcours)
-static void getChildren(Trie trie, int state, int *children, int *count) {
-    *count = 0;
-    for (int i = 0; i < trie->hashSize; i++) {
-        List l = trie->transition[i];
-        while (l) {
-            if (l->startNode == state) {
-                children[(*count)++] = l->targetNode;
-            }
-            l = l->next;
-        }
-    }
-}
-
 void buildAhoCorasick(Trie trie) {
     if (!trie) return;
     
     Queue q = createQueue(trie->nextNode);
     if (!q) return;
     
-    // Initialisation : parcourir tous les fils de la racine
-    for (int i = 0; i < trie->hashSize; i++) {
-        List l = trie->transition[i];
-        while (l) {
-            if (l->startNode == 0) {
-                trie->suppleant[l->targetNode] = 0;
-                Enfiler(q, l->targetNode);
-            }
-            l = l->next;
+    // Initialisation: fils de la racine ont la racine comme suppléant
+    for (int c = 0; c < ALPHA_SIZE; c++) {
+        int fils = trie->transition[0][c];
+        if (fils != -1) {
+            trie->suppleant[fils] = 0;
+            Enfiler(q, fils);
         }
     }
     
-    // Parcours en largeur
+    // Parcours en largeur pour calculer les suppléants
     while (!isEmptyQueue(q)) {
         int etat = Defiler(q);
         
-        // Parcourir toutes les transitions depuis cet état
-        for (int i = 0; i < trie->hashSize; i++) {
-            List l = trie->transition[i];
-            while (l) {
-                if (l->startNode == etat) {
-                    int fils = l->targetNode;
-                    unsigned char c = l->letter;
-                    
-                    Enfiler(q, fils);
-                    
-                    // Calculer le suppléant du fils
-                    int suppleant = trie->suppleant[etat];
-                    
-                    while (suppleant != 0 && getTarget(trie, suppleant, c) == -1) {
-                        suppleant = trie->suppleant[suppleant];
-                    }
-                    
-                    int trans = getTarget(trie, suppleant, c);
-                    if (trans != -1 && trans != fils) {
-                        trie->suppleant[fils] = trans;
-                    } else {
-                        trie->suppleant[fils] = 0;
-                    }
-                    
-                    // Héritage des états terminaux
-                    if (trie->finite[trie->suppleant[fils]]) {
-                        trie->finite[fils] = 1;
-                    }
-                }
-                l = l->next;
+        for (int c = 0; c < ALPHA_SIZE; c++) {
+            int fils = trie->transition[etat][c];
+            if (fils == -1) continue;
+            
+            Enfiler(q, fils);
+            
+            // Calculer le suppléant du fils
+            int suppleant = trie->suppleant[etat];
+            
+            while (suppleant != 0 && trie->transition[suppleant][c] == -1) {
+                suppleant = trie->suppleant[suppleant];
+            }
+            
+            if (trie->transition[suppleant][c] != -1 && 
+                trie->transition[suppleant][c] != fils) {
+                trie->suppleant[fils] = trie->transition[suppleant][c];
+            } else {
+                trie->suppleant[fils] = 0;
             }
         }
     }
@@ -264,17 +204,16 @@ int searchAhoCorasick(Trie trie, unsigned char *text) {
     for (int i = 0; i < len; i++) {
         unsigned char c = text[i];
         
-        // Trouver la transition valide
-        while (state != 0 && getTarget(trie, state, c) == -1) {
+        // Suivre les suppléants jusqu'à trouver une transition valide
+        while (state != 0 && trie->transition[state][c] == -1) {
             state = trie->suppleant[state];
         }
         
-        int trans = getTarget(trie, state, c);
-        if (trans != -1) {
-            state = trans;
+        if (trie->transition[state][c] != -1) {
+            state = trie->transition[state][c];
         }
         
-        // Compter les occurrences
+        // Compter tous les mots qui se terminent à cette position
         int temp = state;
         while (temp != 0) {
             if (trie->finite[temp]) {
@@ -295,12 +234,11 @@ int isInTrie(Trie trie, unsigned char *w) {
     
     for (int i = 0; i < len; i++) {
         unsigned char c = w[i];
-        int target = getTarget(trie, state, c);
         
-        if (target == -1)
+        if (trie->transition[state][c] == -1)
             return 0;
         
-        state = target;
+        state = trie->transition[state][c];
     }
     
     return trie->finite[state];
@@ -309,14 +247,8 @@ int isInTrie(Trie trie, unsigned char *w) {
 void freeTrie(Trie trie) {
     if (!trie) return;
     
-    for (int i = 0; i < trie->hashSize; i++) {
-        List l = trie->transition[i];
-        while (l) {
-            List tmp = l;
-            l = l->next;
-            free(tmp);
-        }
-    }
+    for (int i = 0; i < trie->maxNode; i++)
+        free(trie->transition[i]);
     
     free(trie->transition);
     free(trie->finite);
@@ -327,5 +259,4 @@ void freeTrie(Trie trie) {
 void printTrieStats(Trie trie) {
     if (!trie) return;
     printf("Noeuds utilises: %d/%d\n", trie->nextNode, trie->maxNode);
-    printf("Taille table de hachage: %d\n", trie->hashSize);
 }

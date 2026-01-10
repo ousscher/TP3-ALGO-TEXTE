@@ -27,7 +27,7 @@ int main(int argc, char *argv[]) {
         int longueur = longueur_min + (rand() % (longueur_max - longueur_min + 1));
         
         for (int j = 0; j < longueur; j++) {
-            unsigned char c = (unsigned char)(rand() % taille_alphabet);
+            unsigned char c = 'a' + (rand() % taille_alphabet);
             putchar(c);
         }
         putchar('\n');
