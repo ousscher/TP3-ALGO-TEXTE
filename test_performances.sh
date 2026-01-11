@@ -30,7 +30,7 @@ echo "alphabet,longueur_mots,implementation,temps_execution,nb_occurrences" > re
 ALPHABETS=(2 4 20 70)
 WORD_RANGES=("5-15" "15-30" "30-60")
 NB_MOTS=100
-TEXT_LENGTH=1000000  # 1 million de caractères
+TEXT_LENGTH=5000000  # 5 million de caractères
 
 echo "Début des tests..."
 echo "Paramètres: $NB_MOTS mots, texte de $TEXT_LENGTH caractères"

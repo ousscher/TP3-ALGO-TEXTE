@@ -15,7 +15,7 @@ typedef struct _list *List;
 struct _trie {
     int maxNode;
     int nextNode;
-    List *transition;
+    List *transition;   
     char *finite;
     int *suppleant;
     int hashSize;
