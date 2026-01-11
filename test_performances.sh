@@ -1,113 +1,140 @@
 #!/bin/bash
 
-# Script de tests de performance pour Aho-Corasick
-# Génère des textes et mots, puis mesure les temps d'exécution
-
-# Couleurs pour l'affichage
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-NC='\033[0m' # No Color
-
-# Configuration
+# Dossier pour les données temporaires
 DATA_DIR="test_performances_data"
-CSV_FILE="resultats_performances.csv"
-TEXTE_LENGTH=5000000
-ALPHABETS=(2 4 20 70)
-MOT_RANGES=("5 15" "15 30" "30 60")
-NB_MOTS=100
 
-echo -e "${GREEN}=== Tests de performance Aho-Corasick ===${NC}\n"
-
-# Créer le dossier de données
-echo -e "${YELLOW}Création du dossier de données...${NC}"
+# Créer le dossier s'il n'existe pas
 mkdir -p "$DATA_DIR"
 
-# Initialiser le fichier CSV
-echo "alphabet,longueur_mots,implementation,temps_execution,nb_occurrences" > "$CSV_FILE"
-echo -e "${GREEN}✓ Fichier CSV initialisé${NC}\n"
+# Compilation
+echo "Compilation des programmes..."
+# gcc -O2 -o genere-mots genere-mots.c
+# gcc -O2 -o genere-texte genere-texte.c
+# gcc -O2 -o ac-matrice ac-matrice.c trie_matrix.c
+# gcc -O2 -o ac-hachage ac-hachage.c trie_hash.c
+make clean
+make all
 
-# Vérifier que les exécutables existent
-for prog in genere-texte genere-mots ac-matrice ac-hachage; do
-    if [ ! -f "./$prog" ]; then
-        echo -e "${RED}Erreur: $prog n'existe pas. Exécutez 'make all' d'abord.${NC}"
-        exit 1
-    fi
-done
+if [ $? -ne 0 ]; then
+    echo "Erreur de compilation!"
+    exit 1
+fi
 
-echo -e "${GREEN}✓ Tous les exécutables sont présents${NC}\n"
-
-# Fonction pour mesurer le temps d'exécution
-measure_time() {
-    local command=$1
-    local start=$(date +%s.%N)
-    local output=$($command)
-    local end=$(date +%s.%N)
-    local duration=$(awk "BEGIN {print $end - $start}")
-    echo "$duration|$output"
-}
-
-# Étape 1: Génération des textes
-echo -e "${YELLOW}=== Étape 1: Génération des textes ===${NC}"
-for alpha in "${ALPHABETS[@]}"; do
-    texte_file="$DATA_DIR/texte_alpha${alpha}.txt"
-    echo -n "  Génération texte (alphabet=$alpha, longueur=$TEXTE_LENGTH)... "
-    ./genere-texte $TEXTE_LENGTH $alpha > "$texte_file"
-    echo -e "${GREEN}✓${NC}"
-done
+echo "Compilation réussie!"
 echo ""
 
-# Étape 2: Génération des mots
-echo -e "${YELLOW}=== Étape 2: Génération des ensembles de mots ===${NC}"
-for alpha in "${ALPHABETS[@]}"; do
-    echo "  Alphabet $alpha:"
-    for range in "${MOT_RANGES[@]}"; do
-        read -r min_len max_len <<< "$range"
-        mots_file="$DATA_DIR/mots_alpha${alpha}_len${min_len}-${max_len}.txt"
-        echo -n "    Mots longueur $min_len-$max_len... "
-        ./genere-mots $NB_MOTS $min_len $max_len $alpha > "$mots_file"
-        echo -e "${GREEN}✓${NC}"
+# Créer le fichier CSV
+echo "alphabet,longueur_mots,implementation,temps_execution,nb_occurrences" > resultats.csv
+
+# Paramètres de test
+ALPHABETS=(2 4 20 70)
+WORD_RANGES=("5-15" "15-30" "30-60")
+NB_MOTS=100
+TEXT_LENGTH=1000000  # 1 million de caractères
+
+echo "Début des tests..."
+echo "Paramètres: $NB_MOTS mots, texte de $TEXT_LENGTH caractères"
+echo ""
+
+for ALPHABET in "${ALPHABETS[@]}"; do
+    for RANGE in "${WORD_RANGES[@]}"; do
+
+        IFS='-' read -ra LIMITS <<< "$RANGE"
+        MIN_LEN=${LIMITS[0]}
+        MAX_LEN=${LIMITS[1]}
+
+        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+        echo "Test: alphabet=$ALPHABET, longueur=$RANGE"
+
+        PREFIX="test_${ALPHABET}_${RANGE}"
+        WORDS_FILE="$DATA_DIR/${PREFIX}_words.txt"
+        TEXT_FILE="$DATA_DIR/${PREFIX}_text.txt"
+
+        echo "  Génération des mots..."
+        ./genere-mots $NB_MOTS $MIN_LEN $MAX_LEN $ALPHABET > "$WORDS_FILE"
+
+        if [ ! -s "$WORDS_FILE" ]; then
+            echo "  ERREUR: fichier mots vide!"
+            continue
+        fi
+
+        echo "  Génération du texte..."
+        ./genere-texte $TEXT_LENGTH $ALPHABET > "$TEXT_FILE"
+
+        if [ ! -s "$TEXT_FILE" ]; then
+            echo "  ERREUR: fichier texte vide!"
+            continue
+        fi
+
+        ACTUAL_SIZE=$(wc -c < "$TEXT_FILE")
+        echo "  Taille texte: $ACTUAL_SIZE caractères"
+
+        # Test matrice
+        echo -n "  Test matrice... "
+        START=$(date +%s.%N)
+        RESULT_MATRICE=$(./ac-matrice "$WORDS_FILE" "$TEXT_FILE" 2>/dev/null)
+        END=$(date +%s.%N)
+        TIME_MATRICE=$(awk "BEGIN {print $END - $START}")
+
+        echo "${TIME_MATRICE}s → $RESULT_MATRICE occurrences"
+        echo "$ALPHABET,$RANGE,matrice,$TIME_MATRICE,$RESULT_MATRICE" >> resultats.csv
+
+        # Test hachage
+        echo -n "  Test hachage... "
+        START=$(date +%s.%N)
+        RESULT_HACHAGE=$(./ac-hachage "$WORDS_FILE" "$TEXT_FILE" 2>/dev/null)
+        END=$(date +%s.%N)
+        TIME_HACHAGE=$(awk "BEGIN {print $END - $START}")
+
+        echo "${TIME_HACHAGE}s → $RESULT_HACHAGE occurrences"
+        echo "$ALPHABET,$RANGE,hachage,$TIME_HACHAGE,$RESULT_HACHAGE" >> resultats.csv
+
+        if [ "$RESULT_MATRICE" != "$RESULT_HACHAGE" ]; then
+            echo "  ⚠️  ERREUR: résultats différents!"
+        else
+            echo "  ✓ Résultats cohérents"
+        fi
+
+        if (( $(echo "$TIME_MATRICE > 0" | bc -l) )); then
+            SPEEDUP=$(awk "BEGIN {printf \"%.2f\", $TIME_HACHAGE / $TIME_MATRICE}")
+            echo "  Speedup matrice: ${SPEEDUP}x"
+        fi
+
+        echo ""
+        sleep 0.1
     done
 done
+
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "Tests terminés! Résultats dans resultats.csv"
 echo ""
 
-# Étape 3: Tests de performance
-echo -e "${YELLOW}=== Étape 3: Tests de performance ===${NC}"
-total_tests=$((${#ALPHABETS[@]} * ${#MOT_RANGES[@]} * 2))
-current_test=0
+# Résumé
+echo "=== RÉSUMÉ ==="
+printf "%-10s %-15s %-12s %-12s %-12s\n" "Alphabet" "Longueur" "Impl." "Temps(s)" "Occur."
+echo "────────────────────────────────────────────────────────────"
 
-for alpha in "${ALPHABETS[@]}"; do
-    texte_file="$DATA_DIR/texte_alpha${alpha}.txt"
-    
-    for range in "${MOT_RANGES[@]}"; do
-        read -r min_len max_len <<< "$range"
-        mots_file="$DATA_DIR/mots_alpha${alpha}_len${min_len}-${max_len}.txt"
-        longueur_label="${min_len}-${max_len}"
-        
-        # Test avec ac-matrice
-        current_test=$((current_test + 1))
-        echo -n "  [$current_test/$total_tests] Alpha=$alpha, Longueur=$longueur_label, Matrice... "
-        result=$(measure_time "./ac-matrice $mots_file $texte_file")
-        temps=$(echo "$result" | cut -d'|' -f1)
-        occurrences=$(echo "$result" | cut -d'|' -f2)
-        echo "$alpha,$longueur_label,matrice,$temps,$occurrences" >> "$CSV_FILE"
-        echo -e "${GREEN}✓${NC} (${temps}s, $occurrences occ.)"
-        
-        # Test avec ac-hachage
-        current_test=$((current_test + 1))
-        echo -n "  [$current_test/$total_tests] Alpha=$alpha, Longueur=$longueur_label, Hachage... "
-        result=$(measure_time "./ac-hachage $mots_file $texte_file")
-        temps=$(echo "$result" | cut -d'|' -f1)
-        occurrences=$(echo "$result" | cut -d'|' -f2)
-        echo "$alpha,$longueur_label,hachage,$temps,$occurrences" >> "$CSV_FILE"
-        echo -e "${GREEN}✓${NC} (${temps}s, $occurrences occ.)"
-    done
-    echo ""
+tail -n +2 resultats.csv | while IFS=, read -r alpha len impl temps occ; do
+    printf "%-10s %-15s %-12s %-12s %-12s\n" "$alpha" "$len" "$impl" "$temps" "$occ"
 done
 
-echo -e "${GREEN}=== Tests terminés ===${NC}"
-echo -e "Résultats sauvegardés dans: ${YELLOW}$CSV_FILE${NC}"
-echo -e "Données générées dans: ${YELLOW}$DATA_DIR/${NC}"
 echo ""
-echo -e "${YELLOW}Pour visualiser les résultats, exécutez:${NC}"
-echo -e "  python3 plot_performances.py"
+
+# Analyse
+echo "=== ANALYSE ==="
+AVG_MAT=$(tail -n +2 resultats.csv | grep matrice | awk -F, '{sum+=$4; c++} END {if(c) printf "%.4f", sum/c; else print 0}')
+AVG_HASH=$(tail -n +2 resultats.csv | grep hachage | awk -F, '{sum+=$4; c++} END {if(c) printf "%.4f", sum/c; else print 0}')
+
+echo "Temps moyen matrice:  ${AVG_MAT}s"
+echo "Temps moyen hachage:  ${AVG_HASH}s"
+
+if (( $(echo "$AVG_MAT > 0" | bc -l) )); then
+    RATIO=$(awk "BEGIN {printf \"%.2f\", $AVG_HASH / $AVG_MAT}")
+    echo "Ratio: matrice est ${RATIO}x plus rapide en moyenne"
+fi
+
+
+mkdir -p graphiques
+
+# Run Python script from venv
+./venv/bin/python script.py

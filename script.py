@@ -18,7 +18,7 @@ plt.rcParams['figure.figsize'] = (14, 10)
 plt.rcParams['font.size'] = 10
 
 # Fichier CSV à lire
-CSV_FILE = "resultats_performances.csv"
+CSV_FILE = "resultats.csv"
 OUTPUT_DIR = "graphiques"
 
 def load_data():

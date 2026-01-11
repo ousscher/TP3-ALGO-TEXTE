@@ -2,7 +2,6 @@
 #include <stdlib.h>
 #include <string.h>
 #include "trie.h"
-
 struct _trie {
     int maxNode;
     int nextNode;
