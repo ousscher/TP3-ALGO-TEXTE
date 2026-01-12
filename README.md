@@ -96,9 +96,7 @@ tp3/
 ├── genere-mots.c               # Générateur de mots
 ├── ac-matrice.c                # Programme principal (matrice)
 ├── ac-hachage.c                # Programme principal (hachage)
-├── test_step1_genere.sh        # Tests des générateurs
-├── test_step2_ac.sh            # Tests d'Aho-Corasick
-├── test_step3_perf.sh          # Tests de performance
+├── test_performances.sh        # Tests de performance
 └── data/                       # Données de test
     ├── mots.txt                # Fourni par le prof
     └── texte.txt               # Fourni par le prof
@@ -126,11 +124,10 @@ make mrproper    # Supprime aussi les données générées
 
 ## Auteurs
 
-[Votre nom]
-
+- CHERGUELAINE OUSSAMA
+- SOULEYMAN SALEH MOUSSA
 ## Remarques
 
 - Les fichiers de mots doivent contenir un mot par ligne
 - Les deux implémentations (matrice et hachage) donnent le même résultat
-- La table de hachage est plus économe en mémoire pour les grands alphabets
 - La matrice est plus rapide en accès pour les petits alphabets

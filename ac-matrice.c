@@ -29,8 +29,8 @@ int main(int argc, char *argv[]) {
         total_len += strlen(line);
     }
     
-    // Créer le trie avec une taille suffisante
-    int maxNode = total_len + 100;
+    // Créer le trie avec une estimation de la taille
+    int maxNode = (int)(total_len * 0.8) + nb_mots;
     Trie trie = createTrie(maxNode);
     if (!trie) {
         fprintf(stderr, "Erreur creation trie\n");

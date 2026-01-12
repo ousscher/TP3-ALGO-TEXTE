@@ -22,15 +22,26 @@ int main(int argc, char *argv[]) {
     // Compter les mots pour dimensionner le trie
     int nb_mots = 0;
     int total_len = 0;
+    int max_word_len = 0;
     char line[MAX_LINE];
     
     while (fgets(line, MAX_LINE, f_mots)) {
         nb_mots++;
-        total_len += strlen(line);
+        int len = strlen(line) - 1; // -1 pour le \n
+        if (len > 0) {
+            total_len += len;
+            if (len > max_word_len) max_word_len = len;
+        }
     }
     
-    // Créer le trie avec une taille suffisante
-    int maxNode = total_len + 100;
+    // On estime que 80% des caractères seront des nœuds uniques (partage de préfixes)
+    int maxNode = (int)(total_len * 0.8) + nb_mots;
+    
+    // Sécurité : au moins nb_mots nœuds, au plus total_len
+    if (maxNode < nb_mots) maxNode = nb_mots;
+    if (maxNode > total_len + 100) maxNode = total_len + 100;
+    
+    
     Trie trie = createTrie(maxNode);
     if (!trie) {
         fprintf(stderr, "Erreur creation trie\n");
@@ -38,10 +49,9 @@ int main(int argc, char *argv[]) {
         return 1;
     }
     
-    // Insérer les mots dans le trie
     rewind(f_mots);
+    
     while (fgets(line, MAX_LINE, f_mots)) {
-        // Enlever le retour à la ligne
         line[strcspn(line, "\n")] = 0;
         if (strlen(line) > 0) {
             insertInTrie(trie, (unsigned char*)line);
@@ -49,10 +59,12 @@ int main(int argc, char *argv[]) {
     }
     fclose(f_mots);
     
-    // Construire l'automate Aho-Corasick
+    // int actual_nodes = getNextNode(trie);
+    // printf("Nœuds réellement utilisés: %d/%d (%.1f%%)\n", 
+    //        actual_nodes, maxNode, (actual_nodes * 100.0) / maxNode);
+    
     buildAhoCorasick(trie);
     
-    // Lire le texte
     FILE *f_texte = fopen(argv[2], "r");
     if (!f_texte) {
         fprintf(stderr, "Erreur ouverture %s\n", argv[2]);
@@ -72,10 +84,8 @@ int main(int argc, char *argv[]) {
     text[text_len] = '\0';
     fclose(f_texte);
     
-    // Rechercher avec Aho-Corasick
     int count = searchAhoCorasick(trie, text);
     
-    // Afficher UNIQUEMENT le résultat
     printf("%d\n", count);
     
     // Libération
